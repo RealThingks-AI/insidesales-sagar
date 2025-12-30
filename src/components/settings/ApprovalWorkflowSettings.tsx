@@ -89,7 +89,15 @@ const ApprovalWorkflowSettings = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setWorkflows(data || []);
+      
+      // Map the data to match our interface, casting JSON fields
+      const mappedWorkflows: ApprovalWorkflow[] = (data || []).map(item => ({
+        ...item,
+        trigger_conditions: item.trigger_conditions as any,
+        approval_steps: (item.approval_steps as any) || [],
+      }));
+      
+      setWorkflows(mappedWorkflows);
     } catch (error) {
       console.error('Error fetching workflows:', error);
       toast.error('Failed to load approval workflows');
