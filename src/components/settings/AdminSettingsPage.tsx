@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Users, Lock, GitBranch, Plug, Database, Shield } from 'lucide-react';
+import { ChevronDown, Users, Lock, GitBranch, Plug, Database, Shield, Activity, FileText, Megaphone, CheckSquare, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,6 +13,11 @@ import PipelineSettings from '@/components/settings/PipelineSettings';
 import IntegrationSettings from '@/components/settings/IntegrationSettings';
 import BackupRestoreSettings from '@/components/settings/BackupRestoreSettings';
 import AuditLogsSettings from '@/components/settings/AuditLogsSettings';
+import SystemStatusSettings from '@/components/settings/SystemStatusSettings';
+import ScheduledReportsSettings from '@/components/settings/ScheduledReportsSettings';
+import AnnouncementSettings from '@/components/settings/AnnouncementSettings';
+import ApprovalWorkflowSettings from '@/components/settings/ApprovalWorkflowSettings';
+import BrandingSettings from '@/components/settings/BrandingSettings';
 
 interface AdminSection {
   id: string;
@@ -64,6 +69,41 @@ const adminSections: AdminSection[] = [
     description: 'View system activity and security events',
     icon: Shield,
     component: AuditLogsSettings,
+  },
+  {
+    id: 'system-status',
+    title: 'System Status',
+    description: 'Monitor system health, database stats, and storage usage',
+    icon: Activity,
+    component: SystemStatusSettings,
+  },
+  {
+    id: 'scheduled-reports',
+    title: 'Scheduled Reports',
+    description: 'Configure automated email reports',
+    icon: FileText,
+    component: ScheduledReportsSettings,
+  },
+  {
+    id: 'announcements',
+    title: 'Announcement Management',
+    description: 'Create and manage system announcements',
+    icon: Megaphone,
+    component: AnnouncementSettings,
+  },
+  {
+    id: 'approval-workflows',
+    title: 'Approval Workflows',
+    description: 'Configure multi-step approval processes',
+    icon: CheckSquare,
+    component: ApprovalWorkflowSettings,
+  },
+  {
+    id: 'branding',
+    title: 'Branding Settings',
+    description: 'Customize app logo, colors, and appearance',
+    icon: Palette,
+    component: BrandingSettings,
   },
 ];
 
