@@ -55,17 +55,9 @@ const Settings = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* Header */}
+      {/* Tab Navigation */}
       <div className="flex-shrink-0 border-b bg-background">
-        <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your preferences and system configuration
-          </p>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="px-6">
+        <div className="px-6 pt-4">
           <nav className="flex gap-1" role="tablist">
             {visibleTabs.map((tab) => {
               const Icon = tab.icon;
