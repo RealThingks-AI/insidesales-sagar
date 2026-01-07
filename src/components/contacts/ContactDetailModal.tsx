@@ -15,12 +15,14 @@ import { ContactActivityTimeline } from './ContactActivityTimeline';
 import { ContactActivityLogModal } from './ContactActivityLogModal';
 import { ContactTagsManager } from './ContactTagsManager';
 import { ContactEmailTracking } from './ContactEmailTracking';
-import { ContactAssociations } from './ContactAssociations';
 import { EntityEmailHistory } from '@/components/shared/EntityEmailHistory';
 import { RecordChangeHistory } from '@/components/shared/RecordChangeHistory';
+import { RelatedTasksSection } from '@/components/shared/RelatedTasksSection';
 import { SendEmailModal } from '@/components/SendEmailModal';
 import { AccountDetailModalById } from '@/components/accounts/AccountDetailModalById';
 import { MeetingModal } from '@/components/MeetingModal';
+import { MeetingDetailModal } from '@/components/meetings/MeetingDetailModal';
+import { Task } from '@/types/task';
 import { toast } from '@/hooks/use-toast';
 import {
   User,
@@ -34,15 +36,19 @@ import {
   Clock,
   Tag,
   Activity,
-  BarChart3,
   Send,
   History,
   Pencil,
   Link2,
   CalendarPlus,
   ListTodo,
+  Calendar,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Contact {
   id: string;
@@ -64,6 +70,27 @@ interface Contact {
   engagement_score: number | null;
   created_time: string | null;
   modified_time?: string | null;
+}
+
+interface Meeting {
+  id: string;
+  subject: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  description?: string | null;
+  join_url?: string | null;
+  attendees?: unknown;
+  lead_id?: string | null;
+  contact_id?: string | null;
+  account_id?: string | null;
+  deal_id?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  outcome?: string | null;
+  notes?: string | null;
+  lead_name?: string | null;
+  contact_name?: string | null;
 }
 
 interface ContactDetailModalProps {
@@ -89,6 +116,13 @@ export const ContactDetailModal = ({
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [accountName, setAccountName] = useState<string | null>(null);
+  const [tasksRefreshToken, setTasksRefreshToken] = useState(0);
+  
+  // Linked data
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loadingLinked, setLoadingLinked] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [showMeetingDetailModal, setShowMeetingDetailModal] = useState(false);
 
   // Navigate to Tasks module for task creation
   const handleRequestCreateTask = () => {
@@ -100,7 +134,19 @@ export const ContactDetailModal = ({
       recordName: contact.contact_name,
       return: '/contacts',
       returnViewId: contact.id,
-      returnTab: 'related',
+      returnTab: 'tasks',
+    });
+    onOpenChange(false);
+    navigate(`/tasks?${params.toString()}`);
+  };
+
+  const handleRequestEditTask = (task: Task) => {
+    if (!contact) return;
+    const params = new URLSearchParams({
+      viewId: task.id,
+      return: '/contacts',
+      returnViewId: contact.id,
+      returnTab: 'tasks',
     });
     onOpenChange(false);
     navigate(`/tasks?${params.toString()}`);
@@ -115,6 +161,7 @@ export const ContactDetailModal = ({
       } else {
         setAccountName(null);
       }
+      fetchLinkedData();
     }
   }, [contact]);
 
@@ -125,6 +172,25 @@ export const ContactDetailModal = ({
       .eq('id', accountId)
       .single();
     setAccountName(data?.company_name || null);
+  };
+
+  const fetchLinkedData = async () => {
+    if (!contact) return;
+    setLoadingLinked(true);
+    try {
+      // Fetch meetings for this contact
+      const { data: meetingData } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('contact_id', contact.id)
+        .order('start_time', { ascending: false })
+        .limit(5);
+      setMeetings(meetingData || []);
+    } catch (error) {
+      console.error('Error fetching linked data:', error);
+    } finally {
+      setLoadingLinked(false);
+    }
   };
 
   const handleTagsChange = async (newTags: string[]) => {
@@ -158,8 +224,16 @@ export const ContactDetailModal = ({
     onUpdate?.();
   };
 
-  if (!contact) return null;
+  const getMeetingStatusColor = (status: string) => {
+    const statusColors: Record<string, string> = {
+      'scheduled': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      'completed': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      'cancelled': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-800';
+  };
 
+  if (!contact) return null;
 
   return (
     <>
@@ -235,17 +309,17 @@ export const ContactDetailModal = ({
                 <User className="h-4 w-4" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="related" className="flex items-center gap-1">
+              <TabsTrigger value="linked" className="flex items-center gap-1">
                 <Link2 className="h-4 w-4" />
-                Related
+                Linked
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="flex items-center gap-1">
+                <ListTodo className="h-4 w-4" />
+                Tasks
               </TabsTrigger>
               <TabsTrigger value="activity" className="flex items-center gap-1">
                 <Activity className="h-4 w-4" />
                 Activity
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-1">
-                <History className="h-4 w-4" />
-                History
               </TabsTrigger>
               <TabsTrigger value="emails" className="flex items-center gap-1">
                 <Mail className="h-4 w-4" />
@@ -255,9 +329,9 @@ export const ContactDetailModal = ({
                 <Tag className="h-4 w-4" />
                 Tags
               </TabsTrigger>
-              <TabsTrigger value="engagement" className="flex items-center gap-1">
-                <BarChart3 className="h-4 w-4" />
-                Engagement
+              <TabsTrigger value="history" className="flex items-center gap-1">
+                <History className="h-4 w-4" />
+                History
               </TabsTrigger>
             </TabsList>
 
@@ -382,11 +456,113 @@ export const ContactDetailModal = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="related" className="mt-4">
-              <ContactAssociations 
-                contactId={contact.id} 
-                contactName={contact.contact_name}
-                accountId={contact.account_id || undefined}
+            <TabsContent value="linked" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Linked Account */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Account
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {contact.account_id && accountName ? (
+                      <div
+                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                        onClick={() => setShowAccountModal(true)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{accountName}</p>
+                            <p className="text-sm text-muted-foreground">Account</p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" className="gap-2">
+                          <ExternalLink className="h-4 w-4" />
+                          View Details
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No linked account</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Linked Meetings */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Meetings ({meetings.length})
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowMeetingModal(true)}
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingLinked ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : meetings.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No meetings yet</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[180px]">
+                        <div className="space-y-2">
+                          {meetings.map((meeting) => (
+                            <div
+                              key={meeting.id}
+                              className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                              onClick={() => {
+                                setSelectedMeeting(meeting);
+                                setShowMeetingDetailModal(true);
+                              }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{meeting.subject}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(new Date(meeting.start_time), 'dd/MM/yyyy HH:mm')}
+                                </p>
+                              </div>
+                              <Badge className={`ml-2 ${getMeetingStatusColor(meeting.status)}`}>
+                                {meeting.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tasks" className="mt-4">
+              <RelatedTasksSection
+                moduleType="contacts"
+                recordId={contact.id}
+                recordName={contact.contact_name}
+                refreshToken={tasksRefreshToken}
+                onRequestCreateTask={handleRequestCreateTask}
+                onRequestEditTask={handleRequestEditTask}
               />
             </TabsContent>
 
@@ -401,22 +577,39 @@ export const ContactDetailModal = ({
               <ContactActivityTimeline contactId={contact.id} />
             </TabsContent>
 
-            <TabsContent value="history" className="mt-4">
-              <RecordChangeHistory entityType="contacts" entityId={contact.id} maxHeight="400px" />
-            </TabsContent>
-
             <TabsContent value="emails" className="mt-4">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium">Email History</h3>
-                  {contact.email && (
-                    <Button size="sm" onClick={() => setShowEmailModal(true)}>
-                      <Send className="h-4 w-4 mr-1" />
-                      Send Email
-                    </Button>
-                  )}
-                </div>
-                <EntityEmailHistory entityType="contact" entityId={contact.id} />
+              <div className="space-y-6">
+                {/* Email Engagement Stats */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-base">Email Engagement</CardTitle>
+                      {contact.email && (
+                        <Button size="sm" onClick={() => setShowEmailModal(true)}>
+                          <Send className="h-4 w-4 mr-1" />
+                          Send Email
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ContactEmailTracking
+                      emailOpens={contact.email_opens || 0}
+                      emailClicks={contact.email_clicks || 0}
+                      engagementScore={contact.engagement_score || 0}
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* Email History */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Email History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EntityEmailHistory entityType="contact" entityId={contact.id} />
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 
@@ -427,23 +620,8 @@ export const ContactDetailModal = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="engagement" className="mt-4">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium">Email Tracking & Engagement</h3>
-                  {contact.email && (
-                    <Button size="sm" onClick={() => setShowEmailModal(true)}>
-                      <Send className="h-4 w-4 mr-1" />
-                      Send Email
-                    </Button>
-                  )}
-                </div>
-                <ContactEmailTracking
-                  emailOpens={contact.email_opens || 0}
-                  emailClicks={contact.email_clicks || 0}
-                  engagementScore={contact.engagement_score || 0}
-                />
-              </div>
+            <TabsContent value="history" className="mt-4">
+              <RecordChangeHistory entityType="contacts" entityId={contact.id} maxHeight="400px" />
             </TabsContent>
           </Tabs>
         </DialogContent>
@@ -480,8 +658,19 @@ export const ContactDetailModal = ({
         onOpenChange={setShowMeetingModal}
         initialContactId={contact.id}
         onSuccess={() => {
-          onUpdate?.();
           setShowMeetingModal(false);
+          fetchLinkedData();
+          onUpdate?.();
+        }}
+      />
+
+      <MeetingDetailModal
+        open={showMeetingDetailModal}
+        onOpenChange={setShowMeetingDetailModal}
+        meeting={selectedMeeting}
+        onUpdate={() => {
+          fetchLinkedData();
+          onUpdate?.();
         }}
       />
     </>

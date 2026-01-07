@@ -12,13 +12,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { EntityEmailHistory } from '@/components/shared/EntityEmailHistory';
 import { RecordChangeHistory } from '@/components/shared/RecordChangeHistory';
+import { RelatedTasksSection } from '@/components/shared/RelatedTasksSection';
 import { SendEmailModal } from '@/components/SendEmailModal';
 import { LeadActivityTimeline } from './LeadActivityTimeline';
 import { LeadActivityLogModal } from './LeadActivityLogModal';
 import { MeetingModal } from '@/components/MeetingModal';
+import { MeetingDetailModal } from '@/components/meetings/MeetingDetailModal';
+import { AccountDetailModalById } from '@/components/accounts/AccountDetailModalById';
+import { Task } from '@/types/task';
 import { getLeadStatusColor } from '@/utils/leadStatusUtils';
+import { toast } from '@/hooks/use-toast';
 import {
   User,
   Building2,
@@ -36,6 +42,13 @@ import {
   CheckSquare,
   ExternalLink,
   History,
+  Link2,
+  ListTodo,
+  Activity,
+  Tag,
+  Calendar,
+  Briefcase,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -70,6 +83,34 @@ interface Account {
   status: string | null;
 }
 
+interface Meeting {
+  id: string;
+  subject: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  description?: string | null;
+  join_url?: string | null;
+  attendees?: unknown;
+  lead_id?: string | null;
+  contact_id?: string | null;
+  account_id?: string | null;
+  deal_id?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  outcome?: string | null;
+  notes?: string | null;
+  lead_name?: string | null;
+  contact_name?: string | null;
+}
+
+interface Deal {
+  id: string;
+  deal_name: string;
+  stage: string;
+  total_contract_value?: number | null;
+}
+
 interface LeadDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,7 +131,12 @@ export const LeadDetailModal = ({
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showActivityLogModal, setShowActivityLogModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showMeetingDetailModal, setShowMeetingDetailModal] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
 
   // Navigate to Tasks module for task creation
   const handleRequestCreateTask = () => {
@@ -102,7 +148,19 @@ export const LeadDetailModal = ({
       recordName: lead.lead_name,
       return: '/leads',
       returnViewId: lead.id,
-      returnTab: 'related',
+      returnTab: 'tasks',
+    });
+    onOpenChange(false);
+    navigate(`/tasks?${params.toString()}`);
+  };
+
+  const handleRequestEditTask = (task: Task) => {
+    if (!lead) return;
+    const params = new URLSearchParams({
+      viewId: task.id,
+      return: '/leads',
+      returnViewId: lead.id,
+      returnTab: 'tasks',
     });
     onOpenChange(false);
     navigate(`/tasks?${params.toString()}`);
@@ -128,6 +186,48 @@ export const LeadDetailModal = ({
     enabled: !!lead?.account_id,
   });
 
+  // Fetch linked meetings
+  const { data: linkedMeetings = [], isLoading: loadingMeetings } = useQuery({
+    queryKey: ['lead-meetings', lead?.id],
+    queryFn: async () => {
+      if (!lead?.id) return [];
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('lead_id', lead.id)
+        .order('start_time', { ascending: false })
+        .limit(5);
+      
+      if (error) {
+        console.error('Error fetching meetings:', error);
+        return [];
+      }
+      return data as Meeting[];
+    },
+    enabled: !!lead?.id && open,
+  });
+
+  // Fetch linked deals through account
+  const { data: linkedDeals = [], isLoading: loadingDeals } = useQuery({
+    queryKey: ['lead-deals', lead?.account_id],
+    queryFn: async () => {
+      if (!lead?.account_id) return [];
+      const { data, error } = await supabase
+        .from('deals')
+        .select('id, deal_name, stage, total_contract_value')
+        .eq('account_id', lead.account_id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (error) {
+        console.error('Error fetching deals:', error);
+        return [];
+      }
+      return data as Deal[];
+    },
+    enabled: !!lead?.account_id && open,
+  });
+
   if (!lead) return null;
 
   const handleActivityLogged = () => {
@@ -140,6 +240,40 @@ export const LeadDetailModal = ({
   const displayIndustry = linkedAccount?.industry || lead.industry;
   const displayCountry = linkedAccount?.country || lead.country;
   const displayWebsite = linkedAccount?.website || lead.website;
+
+  const getMeetingStatusColor = (status: string) => {
+    const statusColors: Record<string, string> = {
+      'scheduled': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      'completed': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      'cancelled': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStageColor = (stage: string) => {
+    const stageColors: Record<string, string> = {
+      'Lead': 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+      'Qualified': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      'RFQ': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+      'Discussions': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      'Offered': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+      'Won': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      'Lost': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      'Dropped': 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+    };
+    return stageColors[stage] || 'bg-gray-100 text-gray-800';
+  };
+
+  const handleAddTag = () => {
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag('');
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
+  };
 
   return (
     <>
@@ -212,15 +346,35 @@ export const LeadDetailModal = ({
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-7">
+              <TabsTrigger value="overview" className="flex items-center gap-1">
+                <User className="h-4 w-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="linked" className="flex items-center gap-1">
+                <Link2 className="h-4 w-4" />
+                Linked
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="flex items-center gap-1">
+                <ListTodo className="h-4 w-4" />
+                Tasks
+              </TabsTrigger>
+              <TabsTrigger value="activity" className="flex items-center gap-1">
+                <Activity className="h-4 w-4" />
+                Activity
+              </TabsTrigger>
+              <TabsTrigger value="emails" className="flex items-center gap-1">
+                <Mail className="h-4 w-4" />
+                Emails
+              </TabsTrigger>
+              <TabsTrigger value="tags" className="flex items-center gap-1">
+                <Tag className="h-4 w-4" />
+                Tags
+              </TabsTrigger>
               <TabsTrigger value="history" className="flex items-center gap-1">
-                <History className="h-3 w-3" />
+                <History className="h-4 w-4" />
                 History
               </TabsTrigger>
-              <TabsTrigger value="emails">Emails</TabsTrigger>
-              <TabsTrigger value="related">Related</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
@@ -325,12 +479,166 @@ export const LeadDetailModal = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="activity" className="mt-4">
-              <LeadActivityTimeline key={refreshKey} leadId={lead.id} />
+            <TabsContent value="linked" className="mt-4 space-y-4">
+              {/* Linked Account */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Account
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {linkedAccount ? (
+                    <div
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => setShowAccountModal(true)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Building2 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{linkedAccount.company_name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {[linkedAccount.industry, linkedAccount.country].filter(Boolean).join(' • ')}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" className="gap-2">
+                        <ExternalLink className="h-4 w-4" />
+                        View Details
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No linked account</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Linked Meetings */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Meetings ({linkedMeetings.length})
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowMeetingModal(true)}
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingMeetings ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : linkedMeetings.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No meetings yet</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[180px]">
+                        <div className="space-y-2">
+                          {linkedMeetings.map((meeting) => (
+                            <div
+                              key={meeting.id}
+                              className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                              onClick={() => {
+                                setSelectedMeeting(meeting);
+                                setShowMeetingDetailModal(true);
+                              }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{meeting.subject}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(new Date(meeting.start_time), 'dd/MM/yyyy HH:mm')}
+                                </p>
+                              </div>
+                              <Badge className={`ml-2 ${getMeetingStatusColor(meeting.status)}`}>
+                                {meeting.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Linked Deals */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Briefcase className="h-4 w-4" />
+                      Deals ({linkedDeals.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingDeals ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : linkedDeals.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No deals yet</p>
+                        <p className="text-xs mt-1">Link lead to an account to see deals</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[180px]">
+                        <div className="space-y-2">
+                          {linkedDeals.map((deal) => (
+                            <div
+                              key={deal.id}
+                              className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                              onClick={() => navigate(`/deals?viewId=${deal.id}`)}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{deal.deal_name}</p>
+                                {deal.total_contract_value && (
+                                  <p className="text-xs text-muted-foreground">
+                                    ${deal.total_contract_value.toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge className={`ml-2 ${getStageColor(deal.stage)}`}>
+                                {deal.stage}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
-            <TabsContent value="history" className="mt-4">
-              <RecordChangeHistory entityType="leads" entityId={lead.id} maxHeight="400px" />
+            <TabsContent value="tasks" className="mt-4">
+              <RelatedTasksSection
+                moduleType="leads"
+                recordId={lead.id}
+                recordName={lead.lead_name}
+                onRequestCreateTask={handleRequestCreateTask}
+                onRequestEditTask={handleRequestEditTask}
+              />
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-4">
+              <LeadActivityTimeline key={refreshKey} leadId={lead.id} />
             </TabsContent>
 
             <TabsContent value="emails" className="mt-4">
@@ -348,74 +656,50 @@ export const LeadDetailModal = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="related" className="mt-4">
+            <TabsContent value="tags" className="mt-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Linked Account</CardTitle>
+                  <CardTitle className="text-base">Tags & Labels</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  {linkedAccount ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{linkedAccount.company_name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {[linkedAccount.industry, linkedAccount.country].filter(Boolean).join(' • ')}
-                            </p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="gap-2">
-                          <ExternalLink className="h-4 w-4" />
-                          View Account
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                        {linkedAccount.email && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span>{linkedAccount.email}</span>
-                          </div>
-                        )}
-                        {linkedAccount.phone && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span>{linkedAccount.phone}</span>
-                          </div>
-                        )}
-                        {linkedAccount.website && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Globe className="h-4 w-4 text-muted-foreground" />
-                            <a 
-                              href={linkedAccount.website.startsWith('http') ? linkedAccount.website : `https://${linkedAccount.website}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              {linkedAccount.website}
-                            </a>
-                          </div>
-                        )}
-                        {linkedAccount.region && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>{linkedAccount.region}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Building2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>No linked account</p>
-                      <p className="text-xs mt-1">Link this lead to an account for full company details</p>
-                    </div>
-                  )}
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="gap-1 cursor-pointer hover:bg-destructive/20"
+                        onClick={() => handleRemoveTag(tag)}
+                      >
+                        {tag}
+                        <span className="text-xs">×</span>
+                      </Badge>
+                    ))}
+                    {tags.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No tags yet</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                      placeholder="Add a tag..."
+                      className="flex-1 px-3 py-2 text-sm border rounded-md bg-background"
+                    />
+                    <Button size="sm" onClick={handleAddTag}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Note: Tags are managed locally in this view
+                  </p>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-4">
+              <RecordChangeHistory entityType="leads" entityId={lead.id} maxHeight="400px" />
             </TabsContent>
           </Tabs>
         </DialogContent>
@@ -449,6 +733,19 @@ export const LeadDetailModal = ({
           setShowMeetingModal(false);
           onUpdate?.();
         }}
+      />
+
+      <AccountDetailModalById
+        open={showAccountModal}
+        onOpenChange={setShowAccountModal}
+        accountId={lead.account_id || null}
+      />
+
+      <MeetingDetailModal
+        open={showMeetingDetailModal}
+        onOpenChange={setShowMeetingDetailModal}
+        meeting={selectedMeeting}
+        onUpdate={onUpdate}
       />
     </>
   );
