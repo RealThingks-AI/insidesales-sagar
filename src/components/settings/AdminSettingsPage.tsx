@@ -1,125 +1,67 @@
-import { useState } from 'react';
-import { ChevronDown, Users, Lock, GitBranch, Plug, Database, Shield, Activity, FileText, Megaphone, CheckSquare, Palette } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useState, lazy, Suspense, useEffect } from 'react';
+import { Users, Lock, GitBranch, Plug, Database, Shield, Activity, FileText, Megaphone, CheckSquare, Palette } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2, ShieldAlert, Settings2, BarChart3 } from 'lucide-react';
+import SettingsCard from './shared/SettingsCard';
+import SettingsLoadingSkeleton from './shared/SettingsLoadingSkeleton';
 
-// Import existing settings components
-import UserManagement from '@/components/UserManagement';
-import PageAccessSettings from '@/components/settings/PageAccessSettings';
-import PipelineSettings from '@/components/settings/PipelineSettings';
-import IntegrationSettings from '@/components/settings/IntegrationSettings';
-import BackupRestoreSettings from '@/components/settings/BackupRestoreSettings';
-import AuditLogsSettings from '@/components/settings/AuditLogsSettings';
-import SystemStatusSettings from '@/components/settings/SystemStatusSettings';
-import ScheduledReportsSettings from '@/components/settings/ScheduledReportsSettings';
-import AnnouncementSettings from '@/components/settings/AnnouncementSettings';
-import ApprovalWorkflowSettings from '@/components/settings/ApprovalWorkflowSettings';
-import BrandingSettings from '@/components/settings/BrandingSettings';
+// Lazy load admin section components
+const UserManagement = lazy(() => import('@/components/UserManagement'));
+const PageAccessSettings = lazy(() => import('@/components/settings/PageAccessSettings'));
+const PipelineSettings = lazy(() => import('@/components/settings/PipelineSettings'));
+const IntegrationSettings = lazy(() => import('@/components/settings/IntegrationSettings'));
+const BackupRestoreSettings = lazy(() => import('@/components/settings/BackupRestoreSettings'));
+const AuditLogsSettings = lazy(() => import('@/components/settings/AuditLogsSettings'));
+const SystemStatusSettings = lazy(() => import('@/components/settings/SystemStatusSettings'));
+const ScheduledReportsSettings = lazy(() => import('@/components/settings/ScheduledReportsSettings'));
+const AnnouncementSettings = lazy(() => import('@/components/settings/AnnouncementSettings'));
+const ApprovalWorkflowSettings = lazy(() => import('@/components/settings/ApprovalWorkflowSettings'));
+const BrandingSettings = lazy(() => import('@/components/settings/BrandingSettings'));
 
-interface AdminSection {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  component: React.ComponentType;
-}
-
-const adminSections: AdminSection[] = [
-  {
-    id: 'users',
-    title: 'User Directory',
-    description: 'Manage user accounts, roles, and permissions',
-    icon: Users,
-    component: UserManagement,
-  },
-  {
-    id: 'page-access',
-    title: 'Page Access Control',
-    description: 'Configure which roles can access each page',
-    icon: Lock,
-    component: PageAccessSettings,
-  },
-  {
-    id: 'pipeline',
-    title: 'Pipeline & Status Management',
-    description: 'Customize deal stages and lead statuses',
-    icon: GitBranch,
-    component: PipelineSettings,
-  },
-  {
-    id: 'integrations',
-    title: 'Third-Party Integrations',
-    description: 'Connect with Microsoft Teams, Email, and Calendar',
-    icon: Plug,
-    component: IntegrationSettings,
-  },
-  {
-    id: 'backup',
-    title: 'Data Backup & Restore',
-    description: 'Export data and manage backups',
-    icon: Database,
-    component: BackupRestoreSettings,
-  },
-  {
-    id: 'audit-logs',
-    title: 'Audit Logs',
-    description: 'View system activity and security events',
-    icon: Shield,
-    component: AuditLogsSettings,
-  },
-  {
-    id: 'system-status',
-    title: 'System Status',
-    description: 'Monitor system health, database stats, and storage usage',
-    icon: Activity,
-    component: SystemStatusSettings,
-  },
-  {
-    id: 'scheduled-reports',
-    title: 'Scheduled Reports',
-    description: 'Configure automated email reports',
-    icon: FileText,
-    component: ScheduledReportsSettings,
-  },
-  {
-    id: 'announcements',
-    title: 'Announcement Management',
-    description: 'Create and manage system announcements',
-    icon: Megaphone,
-    component: AnnouncementSettings,
-  },
-  {
-    id: 'approval-workflows',
-    title: 'Approval Workflows',
-    description: 'Configure multi-step approval processes',
-    icon: CheckSquare,
-    component: ApprovalWorkflowSettings,
-  },
-  {
-    id: 'branding',
-    title: 'Branding Settings',
-    description: 'Customize app logo, colors, and appearance',
-    icon: Palette,
-    component: BrandingSettings,
-  },
+const adminTabs = [
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'access', label: 'Access', icon: Lock },
+  { id: 'config', label: 'Config', icon: Settings2 },
+  { id: 'system', label: 'System', icon: Activity },
+  { id: 'reports', label: 'Reports', icon: BarChart3 }
 ];
 
-const AdminSettingsPage = () => {
+interface AdminSettingsPageProps {
+  defaultSection?: string | null;
+}
+
+const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
   const { userRole, loading: roleLoading } = useUserRole();
-  const [openSections, setOpenSections] = useState<string[]>(['users']);
+
+  const getTabFromSection = (section: string | null) => {
+    if (!section) return 'users';
+    const sectionToTab: Record<string, string> = {
+      'users': 'users',
+      'page-access': 'access',
+      'pipeline': 'config',
+      'integrations': 'config',
+      'branding': 'config',
+      'approval-workflows': 'config',
+      'backup': 'system',
+      'audit-logs': 'system',
+      'system-status': 'system',
+      'scheduled-reports': 'reports',
+      'announcements': 'reports'
+    };
+    return sectionToTab[section] || 'users';
+  };
+
+  const [activeTab, setActiveTab] = useState(() => getTabFromSection(defaultSection));
+
+  useEffect(() => {
+    if (defaultSection) {
+      setActiveTab(getTabFromSection(defaultSection));
+    }
+  }, [defaultSection]);
 
   const isAdmin = userRole === 'admin';
-
-  const toggleSection = (sectionId: string) => {
-    setOpenSections(prev =>
-      prev.includes(sectionId)
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
-    );
-  };
 
   if (roleLoading) {
     return (
@@ -137,7 +79,7 @@ const AdminSettingsPage = () => {
             <ShieldAlert className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold">Access Denied</h3>
             <p className="text-muted-foreground mt-2 max-w-md">
-              Only administrators can access administration settings. 
+              Only administrators can access administration settings.
               Contact your system administrator if you need access.
             </p>
           </div>
@@ -147,62 +89,96 @@ const AdminSettingsPage = () => {
   }
 
   return (
-    <div className="space-y-4 max-w-6xl">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold">Administration</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage users, permissions, and system configuration
-        </p>
-      </div>
+    <div className="space-y-6 max-w-6xl">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-5 max-w-xl">
+          {adminTabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                <span className="sr-only sm:not-sr-only">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-      {adminSections.map((section) => {
-        const Icon = section.icon;
-        const isOpen = openSections.includes(section.id);
-        const SectionComponent = section.component;
+        <TabsContent value="users" className="mt-6 space-y-6">
+          <SettingsCard icon={Users} title="User Directory" description="Manage user accounts, roles, and permissions">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <UserManagement />
+            </Suspense>
+          </SettingsCard>
+        </TabsContent>
 
-        return (
-          <Collapsible
-            key={section.id}
-            open={isOpen}
-            onOpenChange={() => toggleSection(section.id)}
-          >
-            <Card className={cn(
-              "transition-all duration-200",
-              isOpen && "ring-1 ring-primary/20"
-            )}>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "p-2 rounded-lg",
-                        isOpen ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base font-medium">{section.title}</CardTitle>
-                        <CardDescription className="text-sm">{section.description}</CardDescription>
-                      </div>
-                    </div>
-                    <ChevronDown className={cn(
-                      "h-5 w-5 text-muted-foreground transition-transform duration-200",
-                      isOpen && "rotate-180"
-                    )} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0 pb-6">
-                  <div className="pt-4 border-t">
-                    <SectionComponent />
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-        );
-      })}
+        <TabsContent value="access" className="mt-6 space-y-6">
+          <SettingsCard icon={Lock} title="Page Access Control" description="Configure which roles can access each page">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <PageAccessSettings />
+            </Suspense>
+          </SettingsCard>
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-6 space-y-6">
+          <SettingsCard icon={GitBranch} title="Pipeline & Status Management" description="Customize deal stages and lead statuses">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <PipelineSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={Plug} title="Third-Party Integrations" description="Connect with Microsoft Teams, Email, and Calendar">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <IntegrationSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={CheckSquare} title="Approval Workflows" description="Configure multi-step approval processes">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <ApprovalWorkflowSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={Palette} title="Branding Settings" description="Customize app logo, colors, and appearance">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <BrandingSettings />
+            </Suspense>
+          </SettingsCard>
+        </TabsContent>
+
+        <TabsContent value="system" className="mt-6 space-y-6">
+          <SettingsCard icon={Database} title="Data Backup & Restore" description="Export data and manage backups">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <BackupRestoreSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={Shield} title="Audit Logs" description="View system activity and security events">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <AuditLogsSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={Activity} title="System Status" description="Monitor system health, database stats, and storage usage">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <SystemStatusSettings />
+            </Suspense>
+          </SettingsCard>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6 space-y-6">
+          <SettingsCard icon={FileText} title="Scheduled Reports" description="Configure automated email reports">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <ScheduledReportsSettings />
+            </Suspense>
+          </SettingsCard>
+
+          <SettingsCard icon={Megaphone} title="Announcement Management" description="Create and manage system announcements">
+            <Suspense fallback={<SettingsLoadingSkeleton />}>
+              <AnnouncementSettings />
+            </Suspense>
+          </SettingsCard>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
