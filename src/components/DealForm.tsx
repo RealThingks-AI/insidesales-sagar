@@ -11,7 +11,7 @@ import { validateRequiredFields, getFieldErrors, validateDateLogic, validateReve
 import { DealStageForm } from "./deal-form/DealStageForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
-import { Plus } from "lucide-react";
+import { Plus, ListTodo } from "lucide-react";
 
 interface DealFormProps {
   deal: Deal | null;
@@ -30,6 +30,7 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
   const [showPreviousStages, setShowPreviousStages] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const [linkedTasksCount, setLinkedTasksCount] = useState(0);
   const { toast } = useToast();
 
   // NEW: Track current user id for default Lead Owner
@@ -97,6 +98,32 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
     }
     setShowPreviousStages(false);
   }, [deal, isCreating, initialStage, isOpen]);
+
+  // Fetch linked tasks count for this deal
+  useEffect(() => {
+    const fetchLinkedTasksCount = async () => {
+      if (!deal?.id || isCreating) {
+        setLinkedTasksCount(0);
+        return;
+      }
+      
+      const { count, error } = await supabase
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('deal_id', deal.id);
+      
+      if (error) {
+        console.error('Error fetching linked tasks count:', error);
+        return;
+      }
+      
+      setLinkedTasksCount(count || 0);
+    };
+    
+    if (isOpen && deal?.id) {
+      fetchLinkedTasksCount();
+    }
+  }, [deal?.id, isOpen, isCreating]);
 
   const currentStage = formData.stage || 'Lead';
 
@@ -437,8 +464,17 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
                   variant="secondary"
                   onClick={handleActionButtonClick}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Task
+                  {linkedTasksCount > 0 ? (
+                    <>
+                      <ListTodo className="h-4 w-4 mr-2" />
+                      View Tasks ({linkedTasksCount})
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Task
+                    </>
+                  )}
                 </Button>
               )}
             </div>
