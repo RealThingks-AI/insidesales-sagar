@@ -61,22 +61,22 @@ const Notifications = () => {
     const dealMatch = message.match(/deal[:\s]+([a-f0-9-]{36})/);
     const leadMatch = message.match(/lead[:\s]+([a-f0-9-]{36})/);
     
-    if (notification.lead_id) {
-      navigate(`/leads?highlight=${notification.lead_id}`);
+    // Task notification types - navigate to Tasks page
+    const taskNotificationTypes = [
+      'task_assigned', 'task_unassigned', 'task_completed', 
+      'task_updated', 'task_deleted'
+    ];
+    
+    if (taskNotificationTypes.includes(notification.notification_type)) {
+      navigate('/tasks');
+    } else if (notification.lead_id) {
+      navigate(`/leads?viewId=${notification.lead_id}`);
     } else if (dealMatch) {
       const dealId = dealMatch[1];
-      navigate(`/deals?highlight=${dealId}`);
+      navigate(`/deals?viewId=${dealId}`);
     } else if (leadMatch) {
       const leadId = leadMatch[1];
-      navigate(`/leads?highlight=${leadId}`);
-    } else if (notification.notification_type === 'action_item') {
-      if (message.includes('deal')) {
-        navigate('/deals');
-      } else if (message.includes('lead') || message.includes('contact')) {
-        navigate('/leads');
-      } else {
-        navigate('/deals');
-      }
+      navigate(`/leads?viewId=${leadId}`);
     } else if (notification.notification_type === 'deal_update') {
       navigate('/deals');
     } else if (notification.notification_type === 'lead_update') {
@@ -96,12 +96,20 @@ const Notifications = () => {
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'action_item':
-        return '📋';
       case 'lead_update':
         return '👤';
       case 'deal_update':
         return '💼';
+      case 'task_assigned':
+        return '✅';
+      case 'task_unassigned':
+        return '📤';
+      case 'task_completed':
+        return '🎉';
+      case 'task_updated':
+        return '📝';
+      case 'task_deleted':
+        return '🗑️';
       default:
         return '🔔';
     }
@@ -118,7 +126,7 @@ const Notifications = () => {
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-3">
               <Bell className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+              <h1 className="text-xl font-semibold text-foreground">Notifications</h1>
               {unreadCount > 0 && (
                 <Badge variant="destructive" className="rounded-full">
                   {unreadCount} unread
@@ -154,10 +162,10 @@ const Notifications = () => {
           </div>
         ) : notifications.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center text-muted-foreground">
+          <div className="text-center text-muted-foreground">
               <Bell className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
               <h3 className="text-lg font-semibold mb-2">No notifications yet</h3>
-              <p className="text-sm">You'll see updates about action items and leads here</p>
+              <p className="text-sm">You'll see updates about tasks and records here</p>
             </div>
           </div>
         ) : (
@@ -168,7 +176,7 @@ const Notifications = () => {
                   key={notification.id}
                   className={cn(
                     "p-6 hover:bg-muted/50 cursor-pointer transition-colors relative group",
-                    notification.status === 'unread' && "bg-blue-50/50 border-l-4 border-l-blue-500"
+                    notification.status === 'unread' && "bg-primary/5 border-l-4 border-l-primary"
                   )}
                   onClick={() => handleNotificationClick(notification)}
                 >
@@ -190,7 +198,7 @@ const Notifications = () => {
                               {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                             </p>
                             {notification.status === 'unread' && (
-                              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                              <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
                                 New
                               </Badge>
                             )}

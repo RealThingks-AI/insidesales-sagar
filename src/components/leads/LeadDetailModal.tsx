@@ -49,25 +49,26 @@ import {
   Calendar,
   Briefcase,
   Loader2,
+  MousePointer,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Lead {
   id: string;
   lead_name: string;
-  company_name: string | null;
+  company_name?: string | null;
   account_id?: string | null;
-  position: string | null;
-  email: string | null;
-  phone_no: string | null;
-  linkedin: string | null;
-  website: string | null;
-  country: string | null;
-  industry: string | null;
-  contact_source: string | null;
-  description: string | null;
-  lead_status: string | null;
-  created_time: string | null;
+  position?: string | null;
+  email?: string | null;
+  phone_no?: string | null;
+  linkedin?: string | null;
+  website?: string | null;
+  country?: string | null;
+  industry?: string | null;
+  contact_source?: string | null;
+  description?: string | null;
+  lead_status?: string | null;
+  created_time?: string | null;
   modified_time?: string | null;
 }
 
@@ -302,7 +303,7 @@ export const LeadDetailModal = ({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
                 {onEdit && (
                   <Button
                     variant="outline"
@@ -314,33 +315,6 @@ export const LeadDetailModal = ({
                     Edit
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowMeetingModal(true)}
-                  className="gap-2"
-                >
-                  <CalendarPlus className="h-4 w-4" />
-                  Meeting
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRequestCreateTask}
-                  className="gap-2"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  Task
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowActivityLogModal(true)}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Activity
-                </Button>
               </div>
             </div>
           </DialogHeader>
@@ -479,47 +453,43 @@ export const LeadDetailModal = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="linked" className="mt-4 space-y-4">
-              {/* Linked Account */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Account
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {linkedAccount ? (
-                    <div
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                      onClick={() => setShowAccountModal(true)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{linkedAccount.company_name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {[linkedAccount.industry, linkedAccount.country].filter(Boolean).join(' • ')}
-                          </p>
+            <TabsContent value="linked" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Linked Account */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Account
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {linkedAccount ? (
+                      <div
+                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                        onClick={() => setShowAccountModal(true)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{linkedAccount.company_name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {[linkedAccount.industry, linkedAccount.country].filter(Boolean).join(' • ')}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm" className="gap-2">
-                        <ExternalLink className="h-4 w-4" />
-                        View Details
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-muted-foreground">
-                      <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No linked account</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No linked account</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Linked Meetings */}
                 <Card>
                   <CardHeader className="pb-3">
@@ -638,21 +608,49 @@ export const LeadDetailModal = ({
             </TabsContent>
 
             <TabsContent value="activity" className="mt-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium">Activity Timeline</h3>
+                <Button size="sm" onClick={() => setShowActivityLogModal(true)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Log Activity
+                </Button>
+              </div>
               <LeadActivityTimeline key={refreshKey} leadId={lead.id} />
             </TabsContent>
 
             <TabsContent value="emails" className="mt-4">
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium">Email History</h3>
-                  {lead.email && (
-                    <Button size="sm" onClick={() => setShowEmailModal(true)}>
-                      <Send className="h-4 w-4 mr-1" />
-                      Send Email
-                    </Button>
-                  )}
+                {/* Compact Email Engagement Stats with Send Button */}
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-blue-500" />
+                      <span className="text-muted-foreground">Opens:</span>
+                      <span className="font-semibold">0</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MousePointer className="h-4 w-4 text-green-500" />
+                      <span className="text-muted-foreground">Clicks:</span>
+                      <span className="font-semibold">0</span>
+                      <span className="text-xs text-muted-foreground">(0.0%)</span>
+                    </div>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setShowEmailModal(true)}
+                    disabled={!lead.email}
+                    title={!lead.email ? "No email address available" : "Send email to lead"}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    Send Email
+                  </Button>
                 </div>
-                <EntityEmailHistory entityType="lead" entityId={lead.id} />
+
+                {/* Email History */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Email History</h4>
+                  <EntityEmailHistory entityType="lead" entityId={lead.id} />
+                </div>
               </div>
             </TabsContent>
 
